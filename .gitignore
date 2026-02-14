@@ -1,0 +1,13 @@
+data
+
+week12
+
+__pycache__
+
+__pytest_cache__
+*.pyc
+*.pyo
+*.pyd
+*.swp
+*.swo
+*.log
