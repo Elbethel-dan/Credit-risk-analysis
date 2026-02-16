@@ -15,7 +15,9 @@ from typing import List, Optional
 from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.pipeline import Pipeline
 from sklearn.compose import ColumnTransformer
-from sklearn.preprocessing import OneHotEncoder, StandardScaler, MinMaxScaler
+from sklearn.preprocessing import LabelEncoder, StandardScaler, MinMaxScaler
+from typing import Optional
+from xverse.transformer import WOE
 
 
 # ==========================================================
@@ -38,6 +40,7 @@ class ExtractDateFeatures(BaseEstimator, TransformerMixin):
         X["transaction_hour"] = X[self.date_col].dt.hour
         X["transaction_day"] = X[self.date_col].dt.day
         X["transaction_month"] = X[self.date_col].dt.month
+        X["transaction_year"] = X[self.date_col].dt.year
         X["transaction_dayofweek"] = X[self.date_col].dt.dayofweek
         X["is_weekend"] = X["transaction_dayofweek"].isin([5, 6]).astype(int)
 
@@ -50,151 +53,164 @@ class ExtractDateFeatures(BaseEstimator, TransformerMixin):
 # ==========================================================
 # 2. CUSTOMER AGGREGATION
 # ==========================================================
-
 class AggregateFeatures(BaseEstimator, TransformerMixin):
-
-    def __init__(
-        self,
-        customer_id_col: str,
-        amount_col: str,
-        numeric_cols: Optional[List[str]] = None,
-    ):
+    def __init__(self, customer_id_col: str, amount_col: str, target_col: str = None):
         self.customer_id_col = customer_id_col
         self.amount_col = amount_col
-        self.numeric_cols = numeric_cols or []
-        self.feature_names_: Optional[List[str]] = None
+        self.target_col = target_col
 
-    def fit(self, X: pd.DataFrame, y=None):
+    def fit(self, X, y=None):
         return self
 
-    def transform(self, X: pd.DataFrame) -> pd.DataFrame:
+    def transform(self, X):
         X = X.copy()
 
-        agg_dict = {
-            self.amount_col: ["sum", "mean", "count", "std"]
-        }
+        agg = (
+            X.groupby(self.customer_id_col)[self.amount_col]
+            .agg(["sum", "mean", "count", "std"])
+            .reset_index()
+        )
 
-        for col in self.numeric_cols:
-            if col != self.amount_col:
-                agg_dict[col] = ["mean", "std"]
-
-        result = X.groupby(self.customer_id_col).agg(agg_dict)
-
-        result.columns = [
-            "_".join(col).strip("_") for col in result.columns.values
+        agg.columns = [
+            self.customer_id_col,
+            "total_transaction_amount",
+            "average_transaction_amount",
+            "transaction_count",
+            "std_transaction_amount",
         ]
 
-        result.reset_index(inplace=True)
+        # Merge back to original data
+        X = X.merge(agg, on=self.customer_id_col, how="left")
 
-        self.feature_names_ = result.columns.tolist()
-        return result
-
-
-# ==========================================================
-# 3. FEATURE INTERACTIONS
-# ==========================================================
-
-class FeatureEngineering(BaseEstimator, TransformerMixin):
-
-    def fit(self, X: pd.DataFrame, y=None):
-        return self
-
-    def transform(self, X: pd.DataFrame) -> pd.DataFrame:
-        X = X.copy()
-
-        # Coefficient of variation
-        for col in X.columns:
-            if col.endswith("_std"):
-                mean_col = col.replace("_std", "_mean")
-                if mean_col in X.columns:
-                    X[col.replace("_std", "_cv")] = (
-                        X[col] / (X[mean_col] + 1e-10)
-                    )
-
-        X.fillna(0, inplace=True)
         return X
 
 
 # ==========================================================
-# 4. SAFE OUTLIER CLIPPING (No Row Removal)
+# 3. ENCODE CATEGORICAL VARIABLES
 # ==========================================================
+class LabelEncoderTransformer(BaseEstimator, TransformerMixin):
+    """
+    Encodes categorical columns using Label Encoding to reduce dimensionality.
+    """
 
-class ClipOutliers(BaseEstimator, TransformerMixin):
+    def __init__(self, categorical_cols):
+        self.categorical_cols = categorical_cols
+        self.encoders = {}  # dictionary to store LabelEncoders for each column
+
+    def fit(self, X, y=None):
+        for col in self.categorical_cols:
+            le = LabelEncoder()
+            le.fit(X[col].astype(str))  # ensure all data is string
+            self.encoders[col] = le
+        return self
+
+    def transform(self, X):
+        X = X.copy()
+        for col, le in self.encoders.items():
+            X[col] = le.transform(X[col].astype(str))
+        return X
+
+# ==========================================================
+# 4. WOE TRANSFORMER
+# ==========================================================
+class WoEFeatureTransformer(BaseEstimator, TransformerMixin):
+
+    def __init__(self):
+        self.woe_ = None
+        self.iv_summary_: Optional[pd.DataFrame] = None
+
+    def fit(self, X: pd.DataFrame, y: pd.Series):
+        self.woe_ = WOE()  # no arguments
+        self.woe_.fit(X, y)
+
+        if hasattr(self.woe_, "iv_df_"):
+            self.iv_summary_ = self.woe_.iv_df_
+
+        return self
+
+    def transform(self, X: pd.DataFrame) -> pd.DataFrame:
+        return self.woe_.transform(X)
+
+    def get_iv_summary(self) -> Optional[pd.DataFrame]:
+        return self.iv_summary_
+
+
+# ==========================================================
+# 5. OUTLIER REMOVAL
+# ==========================================================
+class RemoveOutliers(BaseEstimator, TransformerMixin):
 
     def __init__(self, factor: float = 1.5):
         self.factor = factor
         self.bounds_ = {}
 
     def fit(self, X: pd.DataFrame, y=None):
-        numeric_cols = X.select_dtypes(include=np.number).columns
+        numeric_cols = X.select_dtypes(include="number").columns
 
         for col in numeric_cols:
             Q1 = X[col].quantile(0.25)
             Q3 = X[col].quantile(0.75)
             IQR = Q3 - Q1
-            self.bounds_[col] = (
-                Q1 - self.factor * IQR,
-                Q3 + self.factor * IQR,
-            )
+            lower = Q1 - self.factor * IQR
+            upper = Q3 + self.factor * IQR
+            self.bounds_[col] = (lower, upper)
 
         return self
 
     def transform(self, X: pd.DataFrame) -> pd.DataFrame:
         X = X.copy()
+
         for col, (lower, upper) in self.bounds_.items():
             if col in X.columns:
-                X[col] = X[col].clip(lower, upper)
+                X = X[(X[col] >= lower) & (X[col] <= upper)]
+
+        return X.reset_index(drop=True)
+
+
+# ==========================================================
+# 6. SCALING TRANSFORMER
+# ==========================================================
+class ScaleNumericalFeatures(BaseEstimator, TransformerMixin):
+    """
+    Scale numerical features using either Standardization or Normalization.
+
+    Parameters
+    ----------
+    method : str, default="standard"
+        "standard" -> StandardScaler (mean=0, std=1)
+        "normalize" -> MinMaxScaler (range [0,1])
+    columns : list of str, optional
+        List of columns to scale. If None, all numeric columns are scaled.
+    """
+    def __init__(self, method: str = "standard", columns: Optional[list] = None):
+        self.method = method
+        self.columns = columns
+        self.scaler = None
+        self.feature_names_: Optional[list] = None
+
+    def fit(self, X: pd.DataFrame, y=None):
+        X = X.copy()
+        numeric_cols = X.select_dtypes(include="number").columns.tolist()
+        self.feature_names_ = self.columns or numeric_cols
+
+        if self.method == "standard":
+            self.scaler = StandardScaler()
+        elif self.method == "normalize":
+            self.scaler = MinMaxScaler()
+        else:
+            raise ValueError("method must be 'standard' or 'normalize'")
+
+        self.scaler.fit(X[self.feature_names_])
+        return self
+
+    def transform(self, X: pd.DataFrame) -> pd.DataFrame:
+        X = X.copy()
+        X[self.feature_names_] = self.scaler.transform(X[self.feature_names_])
         return X
 
 
 # ==========================================================
-# 5. PREPROCESSOR
-# ==========================================================
-
-class DynamicPreprocessor(BaseEstimator, TransformerMixin):
-
-    def __init__(self, scaling_method: str = "standard"):
-        self.scaling_method = scaling_method
-        self.preprocessor_ = None
-
-    def fit(self, X: pd.DataFrame, y=None):
-
-        numeric_features = X.select_dtypes(include=np.number).columns
-        categorical_features = X.select_dtypes(exclude=np.number).columns
-
-        scaler = (
-            StandardScaler()
-            if self.scaling_method == "standard"
-            else MinMaxScaler()
-        )
-
-        self.preprocessor_ = ColumnTransformer(
-            transformers=[
-                ("num", scaler, numeric_features),
-                (
-                    "cat",
-                    OneHotEncoder(
-                        handle_unknown="ignore",
-                        sparse_output=False,
-                        drop="first",
-                    ),
-                    categorical_features,
-                ),
-            ]
-        )
-
-        self.preprocessor_.fit(X)
-        return self
-
-    def transform(self, X: pd.DataFrame) -> pd.DataFrame:
-        transformed = self.preprocessor_.transform(X)
-        feature_names = self.preprocessor_.get_feature_names_out()
-
-        return pd.DataFrame(transformed, columns=feature_names, index=X.index)
-
-
-# ==========================================================
-# 6. PIPELINE BUILDER 
+# 7. PIPELINE BUILDER 
 # ==========================================================
 
 def build_feature_engineering_pipeline(
@@ -202,15 +218,26 @@ def build_feature_engineering_pipeline(
     amount_col: str,
     date_col: str,
     numeric_cols: Optional[List[str]] = None,
+    categorical_cols: Optional[List[str]] = None,
     scaling_method: str = "standard",
+    iv_threshold: float = 0.02,
+    max_bins: int = 5,
+    min_bin_pct: float = 0.05,
 ):
-
+    """
+    Feature Engineering Pipeline (your specified order):
+    1. Date feature extraction
+    2. Categorical encoding
+    3. WoE transformation
+    4. Outlier removal
+    5. Scaling
+    """
     return Pipeline(
         steps=[
             ("date_features", ExtractDateFeatures(date_col)),
-            ("aggregation", AggregateFeatures(customer_id_col, amount_col, numeric_cols)),
-            ("feature_engineering", FeatureEngineering()),
-            ("clip_outliers", ClipOutliers()),
-            ("preprocessing", DynamicPreprocessor(scaling_method)),
+            ("encode", LabelEncoderTransformer(categorical_cols or [])),
+            ("woe", WoEFeatureTransformer()),
+            ("remove_outliers", RemoveOutliers()),
+            ("scaling", ScaleNumericalFeatures(method=scaling_method)),
         ]
     )
