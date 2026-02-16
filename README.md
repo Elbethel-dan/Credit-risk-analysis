@@ -123,3 +123,136 @@ WoE transformation implemented using the xverse library
 Used to improve interpretability and monotonic relationship with risk
 
 IV used to assess predictive strength of features
+---
+# 🎯 Task 4: Credit Risk Target Engineering (RFM-Based)
+
+Step 1: RFM Metrics
+
+For each CustomerId:
+
+Recency: Days since last transaction
+
+Frequency: Number of transactions
+
+Monetary: Total transaction value
+
+A fixed snapshot date ensures consistency.
+
+Step 2: Customer Segmentation
+
+K-Means clustering (k=3) applied on scaled RFM features
+
+random_state fixed for reproducibility
+
+Step 3: High-Risk Label Assignment
+
+Cluster with lowest frequency and monetary value identified as high risk
+
+Binary target created:
+
+is_high_risk = 1 → High-risk customers
+
+is_high_risk = 0 → Others
+
+Step 4: Integration
+
+Target variable merged back into the processed dataset
+
+---
+
+# 🤖 Task 5: Model Training & Experiment Tracking
+Models Trained
+
+Logistic Regression
+
+Random Forest
+
+Data Preparation
+
+Train-test split with fixed random_state
+
+Pipeline-compatible feature matrix
+
+Hyperparameter Tuning
+
+Grid Search / Random Search
+
+Experiment Tracking (MLflow)
+
+Logged for each run:
+
+Model parameters
+
+Evaluation metrics
+
+Model artifacts
+
+Best-performing model is registered in the MLflow Model Registry.
+
+---
+
+# 📊 Model Evaluation Metrics
+
+Models are evaluated using:
+
+Accuracy
+
+Precision
+
+Recall
+
+F1 Score
+
+ROC-AUC
+
+ 🧪 Unit Testing
+
+Implemented using pytest
+
+Tests validate:
+
+Feature engineering outputs
+
+Expected columns and transformations
+
+Tests are located in:
+bash
+```
+  tests/test_data_processing.py
+```
+🚀 Task 6: Model Deployment (FastAPI)
+API Features
+
+Built with FastAPI
+
+Loads best model from MLflow Registry
+
+Endpoint:
+
+POST /predict
+
+Returns probability of high credit risk
+
+Data Validation
+
+Request & response schemas defined using Pydantic
+
+---
+# 🐳 Containerization
+
+
+Dockerized FastAPI application
+
+docker-compose.yml simplifies build & run
+
+Run Locally
+bash
+```
+  docker-compose up --build
+```
+
+API available at:
+bash
+```
+  http://localhost:8000/docs
+```
