@@ -43,3 +43,83 @@ Regulatory & business considerations
 - Regulators (and model risk policies) prioritize demonstrable controls: data lineage, feature definition, stability, backtesting and explainability. A high-performing model that cannot be explained or validated to a regulator is a liability.
 
 - In many real programs the pragmatic approach is: start with a well-documented logistic/WoE baseline (scorecard) to satisfy business/regulatory requirements, then explore more complex models as a complementary channel (e.g., second-look automated decisions, or a GBM whose outputs are mapped to a calibrated scorecard), but only after implementing stronger validation, governance and ongoing monitoring for the complex model. 
+
+---
+# 🔍 Task 2: Exploratory Data Analysis (EDA)
+
+Exploratory Data Analysis (EDA) is conducted to understand the structure, quality, and statistical properties of the dataset before modeling.
+
+✔ Data Overview
+
+Inspection of data shape, column names, and data types
+
+Identification of numerical vs categorical variables
+
+✔ Missing Value Analysis
+
+Detection of missing or null values
+
+Assessment of their potential impact on modeling
+
+✔ Univariate Analysis
+
+Distribution analysis of numerical features (e.g., Amount, Value)
+
+Frequency counts for categorical variables
+
+✔ Bivariate Analysis
+
+Relationships between features and the fraud/risk-related indicators
+
+Correlation analysis among numerical variables
+
+✔ Key Insights
+
+Identification of skewed distributions and outliers
+
+Motivation for feature scaling and aggregation
+
+Justification for downstream feature engineering steps
+---
+⚖️ Task 3: Feature Engineering Pipeline
+
+A robust data processing pipeline is built using sklearn.pipeline.Pipeline.
+
+✔ Aggregate Features
+
+Computed per customer:
+
+Total Transaction Amount
+
+Average Transaction Amount
+
+Transaction Count
+
+Standard Deviation of Transaction Amounts
+✔ Date-Time Feature Extraction
+
+From TransactionStartTime:
+
+Transaction Hour
+
+Transaction Day
+
+Transaction Month
+
+Transaction Year
+
+✔ Categorical Encoding
+
+One-Hot Encoding for nominal variables
+
+Handled using ColumnTransformer
+
+✔ Feature Scaling
+
+Standardization (StandardScaler) applied to numerical features
+
+WoE transformation implemented using the xverse library
+
+Used to improve interpretability and monotonic relationship with risk
+
+IV used to assess predictive strength of features
