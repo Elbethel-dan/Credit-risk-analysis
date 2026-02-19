@@ -14,8 +14,3 @@ __pytest_cache__
 
 .DS_Store
 *.ipynb_checkpoints
-
-mlruns
-
-mlflow.db
-
