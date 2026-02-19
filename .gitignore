@@ -11,3 +11,9 @@ __pytest_cache__
 *.swp
 *.swo
 *.log
+
+mlruns
+
+mlflow.db
+
+.DS_Store
