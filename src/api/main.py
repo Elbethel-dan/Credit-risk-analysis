@@ -22,7 +22,7 @@ def clean_feature_names(X: pd.DataFrame) -> pd.DataFrame:
 
 
 # Path to your model
-MODEL_PATH = os.path.join("model", "model.pkl")
+MODEL_PATH = os.path.join("/Users/elbethelzewdie/Downloads/credit-risk-analysis/Credit-risk-analysis/model", "LogisticRegression_best_model.pkl")
 
 # Load the model
 try:
@@ -37,15 +37,22 @@ except Exception as e:
 def predict(customers: List[CustomerData]):
     try:
         input_df = pd.DataFrame([c.dict() for c in customers])
-        input_df = clean_feature_names(input_df)  # Optional if you need to clean column names
+        input_df = clean_feature_names(input_df)
 
-        # Predict probabilities
-        predictions = model.predict_proba(input_df)[:, 1]  # If your model supports predict_proba
+        # Ensure feature alignment
+        input_df = input_df[model.feature_names_in_]
+
+        predictions = model.predict_proba(input_df)[:, 1]
 
         response = [
-            RiskPredictionResponse(CustomerId=row.CustomerId, risk_probability=float(pred))
+            RiskPredictionResponse(
+                CustomerId=row.CustomerId,
+                risk_probability=float(pred)
+            )
             for row, pred in zip(customers, predictions)
         ]
+
         return response
+
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
