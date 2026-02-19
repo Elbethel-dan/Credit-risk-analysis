@@ -12,8 +12,9 @@ __pytest_cache__
 *.swo
 *.log
 
+.DS_Store
+*.ipynb_checkpoints
+
 mlruns
 
 mlflow.db
-
-.DS_Store
