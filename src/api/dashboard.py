@@ -41,7 +41,7 @@ st.markdown("""
 # -------------------------------------------------
 @st.cache_resource
 def load_model():
-    return joblib.load("/Users/elbethelzewdie/Downloads/credit-risk-analysis/Credit-risk-analysis/model/LogisticRegression_best_model.pkl")
+    return joblib.load("/Users/elbethelzewdie/Downloads/credit-risk-analysis/Credit-risk-analysis/model/LogisticRegression_best_model1.pkl")
 
 model = load_model()
 
