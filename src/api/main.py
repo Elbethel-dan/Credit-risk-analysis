@@ -22,7 +22,7 @@ def clean_feature_names(X: pd.DataFrame) -> pd.DataFrame:
 
 
 # Path to your model
-MODEL_PATH = os.path.join("/Users/elbethelzewdie/Downloads/credit-risk-analysis/Credit-risk-analysis/model", "LogisticRegression_best_model.pkl")
+MODEL_PATH = os.path.join("/Users/elbethelzewdie/Downloads/credit-risk-analysis/Credit-risk-analysis/model", "LogisticRegression_best_model1.pkl")
 
 # Load the model
 try:
