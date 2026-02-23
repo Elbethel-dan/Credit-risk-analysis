@@ -16,6 +16,7 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, roc_auc_score
 from sklearn.pipeline import Pipeline
 from xgboost import XGBClassifier
+from sklearn.preprocessing import StandardScaler
 
 RANDOM_STATE = 42
 
@@ -82,16 +83,21 @@ def train_model(X: pd.DataFrame, y: pd.Series):
     # Logistic Regression
     # --------------------------
     with mlflow.start_run(run_name="LogisticRegression_GridSearch"):
-        lr = LogisticRegression(max_iter=5000, random_state=RANDOM_STATE)
+        pipeline = Pipeline([
+            ("scaler", StandardScaler()),
+            ("model", LogisticRegression(
+                max_iter=5000,
+                class_weight="balanced",
+                random_state=RANDOM_STATE
+            ))
+        ])
 
         param_grid = {
-            "C": [0.01, 0.1, 1, 10],
-            "penalty": ["l2"],
-            "solver": ["lbfgs"],
+            "model__C": [0.01, 0.1, 1, 10],
         }
 
         grid = GridSearchCV(
-            lr,
+            pipeline,
             param_grid=param_grid,
             scoring="roc_auc",
             cv=cv_folds,
@@ -121,15 +127,21 @@ def train_model(X: pd.DataFrame, y: pd.Series):
     # Decision Tree
     # --------------------------
     with mlflow.start_run(run_name="DecisionTree_GridSearch"):
-        dt = DecisionTreeClassifier(random_state=RANDOM_STATE)
+        pipeline = Pipeline([
+            ("model", DecisionTreeClassifier(
+                class_weight="balanced",
+                random_state=RANDOM_STATE
+            ))
+        ])
+
 
         param_grid = {
-            "max_depth": [None, 5, 10, 20],
-            "min_samples_split": [2, 5, 10],
+            "model__max_depth": [None, 5, 10, 20],
+            "model__min_samples_split": [2, 5, 10],
         }
 
         grid = GridSearchCV(
-            dt,
+            pipeline,
             param_grid=param_grid,
             scoring="roc_auc",
             cv=cv_folds,
@@ -143,6 +155,11 @@ def train_model(X: pd.DataFrame, y: pd.Series):
             best_model, X_test, y_test
         )
 
+        with open("/Users/elbethelzewdie/Downloads/credit-risk-analysis/Credit-risk-analysis/models/DecisionTree_best_model.pkl", "wb") as f:
+            pickle.dump(best_model, f)
+        print("✅ Decision Tree model saved to DecisionTree_best_model.pkl")
+
+
         mlflow.log_params(grid.best_params_)
         mlflow.log_metrics(metrics_dict["DecisionTree"])
         mlflow.sklearn.log_model(best_model, "model", registered_model_name="DecisionTree")
@@ -152,17 +169,22 @@ def train_model(X: pd.DataFrame, y: pd.Series):
     # Random Forest
     # --------------------------
     with mlflow.start_run(run_name="RandomForest_RandomSearch"):
-        rf = RandomForestClassifier(random_state=RANDOM_STATE)
+        pipeline = Pipeline([
+            ("model", RandomForestClassifier(
+                class_weight="balanced",
+                random_state=RANDOM_STATE
+            ))
+        ])
 
         param_dist = {
-            "n_estimators": [100, 200, 300],
-            "max_depth": [None, 5, 10, 20],
-            "min_samples_split": [2, 5, 10],
-            "min_samples_leaf": [1, 2, 4],
+            "model__n_estimators": [100, 200, 300],
+            "model__max_depth": [None, 5, 10, 20],
+            "model__min_samples_split": [2, 5, 10],
+            "model__min_samples_leaf": [1, 2, 4],
         }
 
         search = RandomizedSearchCV(
-            rf,
+            pipeline,
             param_distributions=param_dist,
             n_iter=20,
             scoring="roc_auc",
@@ -178,6 +200,10 @@ def train_model(X: pd.DataFrame, y: pd.Series):
             best_model, X_test, y_test
         )
 
+        with open("/Users/elbethelzewdie/Downloads/credit-risk-analysis/Credit-risk-analysis/models/RandomForest_best_model.pkl", "wb") as f:
+            pickle.dump(best_model, f)
+        print("✅ Random Forest model saved to RandomForest_best_model.pkl")
+
         mlflow.log_params(search.best_params_)
         mlflow.log_metrics(metrics_dict["RandomForest"])
         mlflow.sklearn.log_model(best_model, "model", registered_model_name="RandomForest")
@@ -187,21 +213,24 @@ def train_model(X: pd.DataFrame, y: pd.Series):
     # XGBoost
     # --------------------------
     with mlflow.start_run(run_name="XGBoost_RandomSearch"):
-        xgb = XGBClassifier(
-            use_label_encoder=False,
-            eval_metric="logloss",
-            random_state=RANDOM_STATE,
-        )
+        pipeline = Pipeline([
+            ("model", XGBClassifier(
+                use_label_encoder=False,
+                eval_metric="logloss",
+                random_state=RANDOM_STATE
+            ))
+        ])
+
 
         param_dist = {
-            "n_estimators": [100, 200, 300],
-            "max_depth": [3, 5, 10],
-            "learning_rate": [0.01, 0.05, 0.1],
-            "subsample": [0.7, 0.8, 1.0],
+            "model__n_estimators": [100, 200, 300],
+            "model__max_depth": [3, 5, 10],
+            "model__learning_rate": [0.01, 0.05, 0.1],
+            "model__subsample": [0.7, 0.8, 1.0]
         }
 
         search = RandomizedSearchCV(
-            xgb,
+            pipeline,
             param_distributions=param_dist,
             n_iter=20,
             scoring="roc_auc",
@@ -216,6 +245,11 @@ def train_model(X: pd.DataFrame, y: pd.Series):
         metrics_dict["XGBoost"] = evaluate_model(
             best_model, X_test, y_test
         )
+
+        with open("/Users/elbethelzewdie/Downloads/credit-risk-analysis/Credit-risk-analysis/models/XGBoost_best_model.pkl", "wb") as f:
+            pickle.dump(best_model, f)
+        print("✅ XGBoost model saved to XGBoost_best_model.pkl")
+
 
         mlflow.log_params(search.best_params_)
         mlflow.log_metrics(metrics_dict["XGBoost"])
